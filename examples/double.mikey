@@ -1,0 +1,9 @@
+func main(): int {
+    let x: int = 10;
+    let y: int = 31;
+    aiya doubleNumber(x) + y;
+}
+
+func doubleNumber(num: int): int {
+    return num * 2;
+}
