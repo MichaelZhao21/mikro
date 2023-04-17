@@ -17,6 +17,6 @@ fn main() {
 
     // Print the tokens
     for token in tokens {
-        println!("{:?}", token);
+        println!("{}", token);
     }
 }

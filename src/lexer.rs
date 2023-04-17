@@ -1,4 +1,4 @@
-use std::error::Error;
+use std::{error::Error, fmt};
 
 const BREAKING_CHARS: [char; 23] = [
     '(', ')', '{', '}', '[', ']', ',', ';', '+', '-', '*', '/', '%', '=', '!', '<', '>', '&', '|',
@@ -11,11 +11,24 @@ pub fn lex(text: String) -> Result<Vec<Token>, Box<dyn Error>> {
     // Get iterator over characters
     let mut chars = text.chars().peekable();
 
-    // Get vector for characters
+    // Create vector for forming strings
     let mut lex_string = LexString::new();
+
+    // Create variable for keeping track of the current location
+    let mut curr_loc = Loc { row: 1, col: 0 };
 
     // Loop over characters
     while let Some(c) = chars.next() {
+        // If the character is a newline, increment the row and reset the column
+        if c == '\n' {
+            curr_loc.row += 1;
+            curr_loc.col = 0;
+            continue;
+        }
+
+        // Increment the column
+        curr_loc.col += 1;
+
         // If the current string is a string, check if the character is a quotation mark
         // If it is, push the string to the tokens and continue
         if lex_string.is_string {
@@ -23,6 +36,7 @@ pub fn lex(text: String) -> Result<Vec<Token>, Box<dyn Error>> {
                 tokens.push(Token::new_with_value(
                     TokenType::StringLit,
                     lex_string.done(),
+                    &curr_loc,
                 ));
                 continue;
             } else {
@@ -41,7 +55,7 @@ pub fn lex(text: String) -> Result<Vec<Token>, Box<dyn Error>> {
         // Check if the character is whitespace
         if c.is_whitespace() {
             if !lex_string.is_empty() {
-                tokens.push(Token::new(lex_string.done()));
+                tokens.push(Token::new(lex_string.done(), &curr_loc));
             }
             continue;
         }
@@ -49,9 +63,9 @@ pub fn lex(text: String) -> Result<Vec<Token>, Box<dyn Error>> {
         // Check if the character is a breaking character
         if BREAKING_CHARS.contains(&c) {
             if !lex_string.is_empty() {
-                tokens.push(Token::new(lex_string.done()));
+                tokens.push(Token::new(lex_string.done(), &curr_loc));
             }
-            tokens.push(Token::new(c.to_string()));
+            tokens.push(Token::new(c.to_string(), &curr_loc));
             continue;
         }
 
@@ -98,43 +112,58 @@ impl LexString {
 #[derive(Debug)]
 pub struct Token {
     pub token_type: TokenType,
-    pub span: Span,
+    pub loc: Loc,
     pub value: Option<String>,
 }
 
 impl Token {
-    pub fn new(str: String) -> Self {
+    pub fn new(str: String, loc: &Loc) -> Self {
         let token_type = match TokenType::new(str) {
             Ok(token_type) => token_type,
             Err(str) => {
                 let (token_type, value) = TokenType::new_valued(str);
                 return Self {
                     token_type,
-                    span: Span { start: 0, end: 1 },
+                    loc: loc.clone(),
                     value: Some(value),
-                }
+                };
             }
         };
         Self {
             token_type,
-            span: Span { start: 0, end: 1 },
+            loc: loc.clone(),
             value: None,
         }
     }
 
-    pub fn new_with_value(token_type: TokenType, value: String) -> Self {
+    pub fn new_with_value(token_type: TokenType, value: String, loc: &Loc) -> Self {
         Self {
             token_type,
-            span: Span { start: 0, end: 1 },
+            loc: loc.clone(),
             value: Some(value),
         }
     }
 }
 
-#[derive(Debug)]
-pub struct Span {
-    pub start: usize,
-    pub end: usize,
+impl fmt::Display for Token {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match &self.value {
+            Some(value) => write!(f, "{} {:?}({})", self.loc, self.token_type, value),
+            None => write!(f, "{} {:?}", self.loc, self.token_type),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
+pub struct Loc {
+    pub row: usize,
+    pub col: usize,
+}
+
+impl fmt::Display for Loc {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "[{}, {}]", self.row, self.col)
+    }
 }
 
 /// The type of a token (eg. class, function, IntLit, etc.)
