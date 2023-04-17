@@ -22,3 +22,9 @@ BinaryExpression            ➞  Expression BinaryOp Expression
 BinaryOp                    ➞  + | - | * | /
 IntLiteral                  ➞  {[0-9]+}
 ```
+
+### Lexing Rules
+
+- **String Literals** start and end with a double quotation mark
+- **Integer Literals** should only contain digits [0-9]
+- **Identifiers** should start with an alpha character and can contain alphanumeric characters
