@@ -1,4 +1,4 @@
-use mikro::lexer;
+use mikro::{lexer, generator};
 
 fn main() {
     let args = std::env::args().collect::<Vec<_>>();
@@ -11,6 +11,10 @@ fn main() {
 
     // Read the input file
     let text = std::fs::read_to_string(&args[1]).unwrap();
+
+    generator::generate_parser(text);
+
+    return;
 
     // Call the lexer
     let tokens = lexer::lex(text).unwrap();
