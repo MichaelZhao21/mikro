@@ -1,6 +1,8 @@
 use std::{
+    cell::RefCell,
     collections::{HashMap, HashSet},
-    fmt,
+    fmt::{self, Display, Formatter},
+    rc::Rc,
 };
 
 use crate::lexer::{LexString, Loc};
@@ -35,12 +37,17 @@ pub fn generate_parser(text: String) {
     );
 
     // Create a hashmap for storing the LR(0) states
-    let mut states = Vec::<State>::new();
+    let states = Rc::new(RefCell::new(Vec::<State>::new()));
 
     // Generate closures for all states
-    generate_states(grammar, &mut states);
+    generate_states(&grammar, Rc::clone(&states));
 
-    println!("{:#?}", states);
+    // Unwrap the states
+    let states = Rc::try_unwrap(states).unwrap().into_inner();
+
+    for state in states.iter() {
+        println!("{}", state);
+    }
 }
 
 const BREAKING_CHARS: [char; 2] = ['|', ';'];
@@ -159,26 +166,35 @@ pub fn validate_grammar(grammar: &Grammar) {
     }
 }
 
-pub fn generate_states(grammar: Grammar, states: &mut Vec<State>) {
+pub fn generate_states(grammar: &Grammar, states: Rc<RefCell<Vec<State>>>) {
     // Get the closure for the first state
-    states.insert(0, State::new(0, grammar.grammar_section[0].clone()));
-    closure(grammar, states, 0);
+    states
+        .borrow_mut()
+        .insert(0, State::new(0, grammar.grammar_section[0].clone(), grammar));
+    closure(grammar, &mut states.borrow_mut(), 0);
 
     let mut changed = true;
     while changed {
         changed = false;
 
         // Keeps track of already generated transition symbols
-        let mut sym_set = HashSet::<&Symbol>::new();
+        let mut sym_set = HashSet::<Symbol>::new();
 
         // Keeps track of new states added
-        let mut new_states = HashMap::<usize, State>::new();
-        let next_state_num = states.len();
+        let mut new_states = Vec::<State>::new();
+        let mut next_state_num = states.borrow_mut().len();
 
         // Iterate through the states
-        for state in states.iter_mut() {
+        let state_count = states.borrow().len();
+        for i in 0..state_count {
+            // Clone the list of productions
+            let prods = states.borrow()[i].productions.clone();
+
             // Iterate through the productions in the given state
-            for prod in &state.productions {
+            let prod_count = prods.len();
+            for j in 0..prod_count {
+                let prod = &prods[j];
+
                 // Make sure production is not in a final state or already has a transition
                 if prod.is_complete() || sym_set.contains(&prod.next_sym().unwrap()) {
                     continue;
@@ -188,35 +204,41 @@ pub fn generate_states(grammar: Grammar, states: &mut Vec<State>) {
                 let sym = prod.next_sym().unwrap();
 
                 // Add it to the set
-                sym_set.insert(sym);
+                sym_set.insert(sym.clone());
 
                 // Get the updated production and advance the dot
                 let mut new_prod = prod.clone();
                 new_prod.advance();
 
                 // Get the state that the new production belongs to
-                let state_num = match get_state_from_prod(states, &new_prod) {
+                let state_num = match get_state_from_prod(&states.borrow(), &new_prod) {
                     Some(num) => num,
                     None => {
                         // If the state does not exist, create it
-                        let num = next_state_num + new_states.len();
-
-                        // Add the state to the new states
-                        new_states.insert(num, State::new(num, new_prod.clone()));
-
-                        // Get the state number
-                        num
+                        let new_state = State::new(next_state_num, new_prod, grammar);
+                        new_states.push(new_state);
+                        next_state_num += 1;
+                        next_state_num - 1
                     }
                 };
-                
-                // Add transition to the current state
-                state.add_transition(&sym, state_num);
+
+                // Add the transition to the current state
+                states.borrow_mut()[i].add_transition(sym, state_num);
             }
+
+            // If new states were added, set the changed flag
+            if !new_states.is_empty() {
+                changed = true;
+            }
+
+            // Add the new states to the states vector
+            states.borrow_mut().append(&mut new_states);
+            new_states.clear();
         }
     }
 }
 
-pub fn closure(grammar: Grammar, states: &mut Vec<State>, state: usize) {
+pub fn closure(grammar: &Grammar, states: &mut Vec<State>, state: usize) {
     // Check to make sure state already exists and has at least one item
     if states.len() <= state {
         panic!("State {} does not exist", state);
@@ -226,7 +248,7 @@ pub fn closure(grammar: Grammar, states: &mut Vec<State>, state: usize) {
     }
 
     // Get the current state
-    let curr_state = states.get_mut(state).unwrap();
+    let curr_state: &mut State = states.get_mut(state).unwrap();
 
     // Loop until nothing changes
     let mut changed = true;
@@ -403,8 +425,11 @@ impl Production {
         Self { lhs, rhs, pos: 0 }
     }
 
-    pub fn next_sym(&self) -> Option<&Symbol> {
-        self.rhs.get(self.pos)
+    pub fn next_sym(&self) -> Option<Symbol> {
+        match self.rhs.get(self.pos) {
+            Some(sym) => Some(sym.clone()),
+            None => None,
+        }
     }
 
     pub fn is_complete(&self) -> bool {
@@ -455,6 +480,22 @@ impl Parseable for Production {
         }
 
         Self { lhs, rhs, pos: 0 }
+    }
+}
+
+impl Display for Production {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{} -> ", self.lhs)?;
+        for (i, sym) in self.rhs.iter().enumerate() {
+            if i == self.pos {
+                write!(f, ". ")?;
+            }
+            write!(f, "{} ", sym)?;
+        }
+        if self.pos == self.rhs.len() {
+            write!(f, ".")?;
+        }
+        Ok(())
     }
 }
 
@@ -566,6 +607,12 @@ impl Parseable for Symbol {
     }
 }
 
+impl Display for Symbol {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.name)
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct State {
     pub num: usize,
@@ -574,12 +621,14 @@ pub struct State {
 }
 
 impl State {
-    pub fn new(num: usize, init_prod: Production) -> Self {
-        Self {
+    pub fn new(num: usize, init_prod: Production, grammar: &Grammar) -> Self {
+        let mut new_state = Self {
             num,
             productions: vec![init_prod],
             transitions: HashMap::new(),
-        }
+        };
+        new_state.closure(grammar);
+        new_state
     }
 
     pub fn add_production(&mut self, prod: Production) {
@@ -590,7 +639,68 @@ impl State {
         self.productions.extend(prods);
     }
 
-    pub fn add_transition(&mut self, sym: &Symbol, state: usize) {
-        self.transitions.insert(sym.clone(), state);
+    pub fn add_transition(&mut self, sym: Symbol, state: usize) {
+        self.transitions.insert(sym, state);
+    }
+
+    pub fn closure(&mut self, grammar: &Grammar) {
+        // Loop until nothing changes
+        let mut changed = true;
+        while changed {
+            changed = false;
+
+            // Vector of new productions to add
+            let mut new_prods = Vec::<Production>::new();
+
+            // Loop over the productions in the state
+            for prod in &self.productions {
+                // Make sure the production is not complete
+                if prod.is_complete() {
+                    continue;
+                }
+
+                // Get the next symbol
+                let sym = prod.next_sym().unwrap();
+                if sym.is_terminal {
+                    continue;
+                }
+
+                // Loop through the grammar productions
+                for g_prod in &grammar.grammar_section {
+                    // Check if the production matches the next symbol
+                    if g_prod.lhs != sym.name {
+                        continue;
+                    }
+
+                    // Check if production is already in the state
+                    if self.productions.contains(&g_prod) {
+                        continue;
+                    }
+
+                    // Add the production to the state
+                    new_prods.push(g_prod.clone());
+
+                    // Set changed flag
+                    changed = true;
+                }
+            }
+
+            // Append the new productions to the state
+            self.add_productions(new_prods.clone());
+        }
+    }
+}
+
+impl Display for State {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        writeln!(f, "[State {}]", self.num)?;
+        for prod in &self.productions {
+            writeln!(f, "\t{}", prod)?;
+        }
+        writeln!(f, "\tTransitions:")?;
+        for (sym, state) in &self.transitions {
+            writeln!(f, "\t\t{} -> {}", sym.name, state)?;
+        }
+        Ok(())
     }
 }

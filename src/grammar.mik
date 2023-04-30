@@ -22,24 +22,24 @@ rhsList
 rhsListTail
 
 ===== g
-grammar => termSection nonTermSection grammarSection ;
+grammar =>          termSection nonTermSection grammarSection ;
 
-termSection =>  DIVIDER TERMINAL_LABEL termList ;
+termSection =>      DIVIDER TERMINAL_LABEL termList ;
 
 nonTermSection =>   DIVIDER NONTERMINAL_LABEL termList ;
 
-termList => ID termList |
-            e ;
+termList =>         ID termList |
+                    e ;
 
 grammarSection =>   DIVIDER GRAMMAR_LABEL productionList ;
 
 productionList =>   production productionList |
                     e ;
 
-production =>   ID ARROW rhsList SEMI ;
+production =>       ID ARROW rhsList SEMI ;
 
-rhsList =>  ID PIPE rhsListTail |
-            e ;
+rhsList =>          ID PIPE rhsListTail |
+                    e ;
 
-rhsListTail =>  ID |
-                ID PIPE rhsListTail ;
+rhsListTail =>      ID |
+                    ID PIPE rhsListTail ;

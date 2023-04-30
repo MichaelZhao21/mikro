@@ -1,4 +1,4 @@
-use mikro::{lexer, generator};
+use mikro::generator;
 
 fn main() {
     let args = std::env::args().collect::<Vec<_>>();
@@ -17,10 +17,10 @@ fn main() {
     return;
 
     // Call the lexer
-    let tokens = lexer::lex(text).unwrap();
-
+    // let tokens = lexer::lex(text).unwrap();
+    
     // Print the tokens
-    for token in tokens {
-        println!("{}", token);
-    }
+    // for token in tokens {
+        // println!("{}", token);
+    // }
 }
