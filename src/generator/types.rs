@@ -1,284 +1,32 @@
 use std::{
-    cell::RefCell,
-    collections::{HashMap, HashSet},
+    collections::HashMap,
     fmt::{self, Display, Formatter},
-    rc::Rc,
 };
 
-use crate::lexer::{LexString, Loc};
+use crate::lexer::Loc;
 
-pub fn generate_parser(text: String) {
-    let tokens = lex_grammar(text).unwrap();
-
-    // Perform a top-down recursive descent parse of the grammar
-    let mut grammar = parse_grammar(tokens);
-
-    // Validate grammar (no duplicate productions, no duplicate terminals, etc.)
-    validate_grammar(&grammar);
-
-    // Print the grammar section
-    println!("Grammar ===================");
-    for prod in &grammar.grammar_section {
-        println!("{}", prod);
-    }
-    println!("===========================\n");
-
-    // Treat the first production as the start symbol
-    let start_symbol = grammar.grammar_section[0].lhs.clone();
-    let psuedo_start_symbol = format!("{}'", start_symbol);
-
-    // Add a new production to the grammar with the psuedo start symbol (S' -> . S)
-    grammar.nonterm_section.push(Term {
-        str: psuedo_start_symbol.clone(),
-    });
-    grammar.grammar_section.insert(
-        0,
-        Production {
-            lhs: psuedo_start_symbol.clone(),
-            rhs: vec![Symbol {
-                name: start_symbol.clone(),
-                is_terminal: false,
-            }],
-            pos: 0,
-        },
-    );
-
-    // Create a hashmap for storing the LR(0) states
-    let states = Rc::new(RefCell::new(Vec::<State>::new()));
-
-    // Generate closures for all states
-    generate_states(&grammar, Rc::clone(&states));
-
-    // Unwrap the states
-    let states = Rc::try_unwrap(states).unwrap().into_inner();
-
-    for state in states.iter() {
-        println!("{}", state);
-    }
-}
-
-const BREAKING_CHARS: [char; 2] = ['|', ';'];
-
-pub fn lex_grammar(text: String) -> Result<Vec<GeneratorToken>, String> {
-    let mut tokens = Vec::new();
-
-    // Get iterator over characters
-    let mut chars = text.chars().peekable();
-
-    // Create vector for forming strings
-    let mut lex_string = LexString::new();
-
-    // Create variable for keeping track of the current location
-    let mut curr_loc = Loc { row: 1, col: 0 };
-
-    // Loop over characters
-    while let Some(c) = chars.next() {
-        // If the character is a newline, increment the row and reset the column
-        if c == '\n' {
-            curr_loc.row += 1;
-            curr_loc.col = 0;
-        }
-
-        // Increment the column
-        curr_loc.col += 1;
-
-        // Check if the character is a quotation mark
-        // If it is, set the is_string flag
-        if c == '"' {
-            lex_string.is_string = true;
-            continue;
-        }
-
-        // Check if the character is whitespace
-        if c.is_whitespace() {
-            if !lex_string.is_empty() {
-                tokens.push(GeneratorToken::new(lex_string.done(), &curr_loc));
-            }
-            continue;
-        }
-
-        // Check if the character is a breaking character
-        if BREAKING_CHARS.contains(&c) {
-            if !lex_string.is_empty() {
-                tokens.push(GeneratorToken::new(lex_string.done(), &curr_loc));
-            }
-            tokens.push(GeneratorToken::new(c.to_string(), &curr_loc));
-            continue;
-        }
-
-        // Otherwise push the character to the current string
-        lex_string.push(c);
-    }
-
-    Ok(tokens)
-}
-
-fn parse_grammar(tokens: Vec<GeneratorToken>) -> Grammar {
-    // Add EOF token
-    let mut tokens = tokens;
-    tokens.push(GeneratorToken {
-        token_type: GeneratorTokenType::EOF,
-        value: None,
-        loc: Loc { row: 0, col: 0 },
-    });
-
-    // Create a token stream
-    let mut stream = TokenStream::new(tokens);
-
-    // Parse the grammar
-    Grammar::parse(&mut stream)
-}
-
-pub fn validate_grammar(grammar: &Grammar) {
-    // Check for duplicate terminals
-    let mut terminals = Vec::<String>::new();
-    for term in &grammar.term_section {
-        if terminals.contains(&term.str) {
-            panic!("Duplicate terminal: {}", term.str);
-        }
-        terminals.push(term.str.clone());
-    }
-
-    // Check for duplicate nonterminals
-    let mut nonterminals = Vec::<String>::new();
-    for term in &grammar.nonterm_section {
-        if nonterminals.contains(&term.str) {
-            panic!("Duplicate nonterminal: {}", term.str);
-        }
-        nonterminals.push(term.str.clone());
-    }
-
-    // Check for duplicate productions
-    let mut productions = Vec::<&Production>::new();
-    for prod in &grammar.grammar_section {
-        if productions.contains(&prod) {
-            panic!("Duplicate production: {:?}", prod);
-        }
-        productions.push(prod);
-    }
-
-    // Check to make sure all terminals and nonterminals in the productions are defined
-    for prod in &grammar.grammar_section {
-        for sym in &prod.rhs {
-            if sym.is_terminal {
-                if !terminals.contains(&sym.name) {
-                    panic!("Undefined terminal: {}", sym.name);
-                }
-            } else {
-                if !nonterminals.contains(&sym.name) {
-                    panic!("Undefined nonterminal: {}", sym.name);
-                }
-            }
-        }
-    }
-}
-
-pub fn generate_states(grammar: &Grammar, states: Rc<RefCell<Vec<State>>>) {
-    // Get the closure for the first state
-    states.borrow_mut().insert(
-        0,
-        State::new(0, grammar.grammar_section[0].clone(), grammar),
-    );
-
-    // Keeps track of already generated transition symbols
-    let mut sym_set = Vec::<HashSet<Symbol>>::new();
-
-    // Add the first state to the symbol set
-    sym_set.push(HashSet::<Symbol>::new());
-
-    let mut changed = true;
-    while changed {
-        changed = false;
-
-        // Keeps track of new states added
-        let mut new_states = Vec::<State>::new();
-        let mut next_state_num = states.borrow_mut().len();
-
-        // Iterate through the states
-        let state_count = states.borrow().len();
-        for i in 0..state_count {
-            // Clone the list of productions
-            let prods = states.borrow()[i].productions.clone();
-
-            // Iterate through the productions in the given state
-            let prod_count = prods.len();
-            for j in 0..prod_count {
-                let prod = &prods[j];
-
-                // Make sure production is not in a final state or already has a transition
-                if prod.is_complete()
-                    || (sym_set.len() > i && sym_set[i].contains(&prod.next_sym().unwrap()))
-                {
-                    continue;
-                }
-
-                // Get the next symbol
-                let sym = prod.next_sym().unwrap();
-
-                // Add it to the symbol set
-                sym_set[i].insert(sym.clone());
-
-                // Get the updated production and advance the dot
-                let mut new_prod = prod.clone();
-                new_prod.advance();
-
-                // Get the state that the new production belongs to
-                let state_num = match get_state_from_prod(&states.borrow(), &new_prod) {
-                    Some(num) => num,
-                    None => {
-                        // If the state does not exist, create it
-                        let new_state = State::new(next_state_num, new_prod, grammar);
-                        new_states.push(new_state);
-                        sym_set.push(HashSet::new());
-                        next_state_num += 1;
-                        next_state_num - 1
-                    }
-                };
-
-                // Add the transition to the current state
-                states.borrow_mut()[i].add_transition(sym, state_num);
-
-                changed = true;
-            }
-
-            // Add the new states to the states vector
-            states.borrow_mut().append(&mut new_states);
-            new_states.clear();
-        }
-    }
-}
-
-pub fn get_state_from_prod(states: &Vec<State>, prod: &Production) -> Option<usize> {
-    for (num, state) in states.iter().enumerate() {
-        if state.productions.contains(prod) {
-            return Some(num.clone());
-        }
-    }
-    None
-}
-
-struct TokenStream {
-    tokens: Vec<GeneratorToken>,
-    index: usize,
+pub struct TokenStream {
+    pub tokens: Vec<GeneratorToken>,
+    pub index: usize,
 }
 
 impl TokenStream {
-    fn new(tokens: Vec<GeneratorToken>) -> Self {
+    pub fn new(tokens: Vec<GeneratorToken>) -> Self {
         Self { tokens, index: 0 }
     }
 
-    fn peek(&self) -> &GeneratorToken {
+    pub fn peek(&self) -> &GeneratorToken {
         self.tokens.get(self.index).unwrap()
     }
 
-    fn next(&mut self) -> &GeneratorToken {
+    pub fn next(&mut self) -> &GeneratorToken {
         let token = self.tokens.get(self.index).unwrap();
         self.index += 1;
         token
     }
 }
 
-trait Parseable {
+pub trait Parseable {
     fn parse(stream: &mut TokenStream) -> Self;
 }
 
@@ -392,7 +140,7 @@ impl Production {
         self.pos += 1;
     }
 
-    fn parse_list(stream: &mut TokenStream) -> Vec<Self> {
+    pub fn parse_list(stream: &mut TokenStream) -> Vec<Self> {
         let mut productions = Vec::<Production>::new();
 
         // Sanity check
