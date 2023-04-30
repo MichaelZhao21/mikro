@@ -16,6 +16,13 @@ pub fn generate_parser(text: String) {
     // Validate grammar (no duplicate productions, no duplicate terminals, etc.)
     validate_grammar(&grammar);
 
+    // Print the grammar section
+    println!("Grammar ===================");
+    for prod in &grammar.grammar_section {
+        println!("{}", prod);
+    }
+    println!("===========================\n");
+
     // Treat the first production as the start symbol
     let start_symbol = grammar.grammar_section[0].lhs.clone();
     let psuedo_start_symbol = format!("{}'", start_symbol);
@@ -168,17 +175,20 @@ pub fn validate_grammar(grammar: &Grammar) {
 
 pub fn generate_states(grammar: &Grammar, states: Rc<RefCell<Vec<State>>>) {
     // Get the closure for the first state
-    states
-        .borrow_mut()
-        .insert(0, State::new(0, grammar.grammar_section[0].clone(), grammar));
-    closure(grammar, &mut states.borrow_mut(), 0);
+    states.borrow_mut().insert(
+        0,
+        State::new(0, grammar.grammar_section[0].clone(), grammar),
+    );
+
+    // Keeps track of already generated transition symbols
+    let mut sym_set = Vec::<HashSet<Symbol>>::new();
+
+    // Add the first state to the symbol set
+    sym_set.push(HashSet::<Symbol>::new());
 
     let mut changed = true;
     while changed {
         changed = false;
-
-        // Keeps track of already generated transition symbols
-        let mut sym_set = HashSet::<Symbol>::new();
 
         // Keeps track of new states added
         let mut new_states = Vec::<State>::new();
@@ -196,15 +206,17 @@ pub fn generate_states(grammar: &Grammar, states: Rc<RefCell<Vec<State>>>) {
                 let prod = &prods[j];
 
                 // Make sure production is not in a final state or already has a transition
-                if prod.is_complete() || sym_set.contains(&prod.next_sym().unwrap()) {
+                if prod.is_complete()
+                    || (sym_set.len() > i && sym_set[i].contains(&prod.next_sym().unwrap()))
+                {
                     continue;
                 }
 
                 // Get the next symbol
                 let sym = prod.next_sym().unwrap();
 
-                // Add it to the set
-                sym_set.insert(sym.clone());
+                // Add it to the symbol set
+                sym_set[i].insert(sym.clone());
 
                 // Get the updated production and advance the dot
                 let mut new_prod = prod.clone();
@@ -217,6 +229,7 @@ pub fn generate_states(grammar: &Grammar, states: Rc<RefCell<Vec<State>>>) {
                         // If the state does not exist, create it
                         let new_state = State::new(next_state_num, new_prod, grammar);
                         new_states.push(new_state);
+                        sym_set.push(HashSet::new());
                         next_state_num += 1;
                         next_state_num - 1
                     }
@@ -224,10 +237,7 @@ pub fn generate_states(grammar: &Grammar, states: Rc<RefCell<Vec<State>>>) {
 
                 // Add the transition to the current state
                 states.borrow_mut()[i].add_transition(sym, state_num);
-            }
 
-            // If new states were added, set the changed flag
-            if !new_states.is_empty() {
                 changed = true;
             }
 
@@ -235,64 +245,6 @@ pub fn generate_states(grammar: &Grammar, states: Rc<RefCell<Vec<State>>>) {
             states.borrow_mut().append(&mut new_states);
             new_states.clear();
         }
-    }
-}
-
-pub fn closure(grammar: &Grammar, states: &mut Vec<State>, state: usize) {
-    // Check to make sure state already exists and has at least one item
-    if states.len() <= state {
-        panic!("State {} does not exist", state);
-    }
-    if states.get(state).unwrap().productions.len() == 0 {
-        panic!("State {} has no items", state);
-    }
-
-    // Get the current state
-    let curr_state: &mut State = states.get_mut(state).unwrap();
-
-    // Loop until nothing changes
-    let mut changed = true;
-    while changed {
-        changed = false;
-
-        // Vector of new productions to add
-        let mut new_prods = Vec::<Production>::new();
-
-        // Loop over the productions in the state
-        for prod in &curr_state.productions {
-            // Make sure the production is not complete
-            if prod.is_complete() {
-                continue;
-            }
-
-            // Get the next symbol
-            let sym = prod.next_sym().unwrap();
-            if sym.is_terminal {
-                continue;
-            }
-
-            // Loop through the grammar productions
-            for g_prod in &grammar.grammar_section {
-                // Check if the production matches the next symbol
-                if g_prod.lhs != sym.name {
-                    continue;
-                }
-
-                // Check if production is already in the state
-                if curr_state.productions.contains(&g_prod) {
-                    continue;
-                }
-
-                // Add the production to the state
-                new_prods.push(g_prod.clone());
-
-                // Set changed flag
-                changed = true;
-            }
-        }
-
-        // Append the new productions to the state
-        curr_state.add_productions(new_prods.clone());
     }
 }
 
@@ -378,7 +330,7 @@ impl Parseable for Grammar {
 
         // Parse grammar section
         while stream.peek().token_type != GeneratorTokenType::EOF {
-            grammar_section.push(Production::parse(stream));
+            grammar_section.append(&mut Production::parse_list(stream));
         }
 
         // Add epsilon symbol to terminal section
@@ -439,10 +391,10 @@ impl Production {
     pub fn advance(&mut self) {
         self.pos += 1;
     }
-}
 
-impl Parseable for Production {
-    fn parse(stream: &mut TokenStream) -> Self {
+    fn parse_list(stream: &mut TokenStream) -> Vec<Self> {
+        let mut productions = Vec::<Production>::new();
+
         // Sanity check
         if stream.peek().token_type == GeneratorTokenType::EOF {
             panic!("Unexpected EOF");
@@ -456,30 +408,46 @@ impl Parseable for Production {
             panic!("Expected arrow");
         }
 
-        // Get the rhs
-        let mut rhs = Vec::<Symbol>::new();
-
-        // Pipes will split the rhs into multiple productions
+        // Get the list of rhs's, split by pipes
         while stream.peek().token_type != GeneratorTokenType::Semi
             && stream.peek().token_type != GeneratorTokenType::EOF
         {
+            // List of symbols on the rhs
+            let mut rhs = Vec::<Symbol>::new();
+
+            // Loop through the rhs until we hit a pipe or semicolon
             while stream.peek().token_type != GeneratorTokenType::Pipe
                 && stream.peek().token_type != GeneratorTokenType::Semi
                 && stream.peek().token_type != GeneratorTokenType::EOF
             {
-                rhs.push(Symbol::parse(stream));
+                // If the symbol is an epsilon, don't add it and continue
+                if stream.peek().token_type == GeneratorTokenType::Epsilon {
+                    stream.next();
+                    break;
+                } else {
+                    rhs.push(Symbol::parse(stream));
+                }
             }
+
+            // Add the production to the list
+            productions.push(Production::new(lhs.clone(), rhs));
+
+            // Check for pipe
             if stream.peek().token_type == GeneratorTokenType::Pipe {
                 stream.next();
             }
         }
 
-        // Check for semicolon
-        if stream.next().token_type != GeneratorTokenType::Semi {
-            panic!("Expected semicolon");
-        }
+        // Consume the semicolon
+        stream.next();
 
-        Self { lhs, rhs, pos: 0 }
+        productions
+    }
+}
+
+impl Parseable for Production {
+    fn parse(_: &mut TokenStream) -> Self {
+        panic!("Use parse_list instead");
     }
 }
 
@@ -555,6 +523,7 @@ pub enum GeneratorTokenType {
     GrammarLabel,
     Id,
     EOF,
+    Epsilon,
 }
 
 impl GeneratorTokenType {
@@ -567,6 +536,7 @@ impl GeneratorTokenType {
             "t" => Ok(Self::TerminalLabel),
             "nt" => Ok(Self::NonTerminalLabel),
             "g" => Ok(Self::GrammarLabel),
+            "e" => Ok(Self::Epsilon),
             _ => Err(str),
         }
     }
@@ -610,6 +580,20 @@ impl Parseable for Symbol {
 impl Display for Symbol {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", self.name)
+    }
+}
+
+impl Symbol {
+    pub fn new(name: String, is_terminal: bool) -> Self {
+        Self { name, is_terminal }
+    }
+
+    /// Returns an empty symbol, which is used for None types
+    pub fn none() -> Self {
+        Self {
+            name: "".to_string(),
+            is_terminal: true,
+        }
     }
 }
 
