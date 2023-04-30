@@ -1,0 +1,45 @@
+===== t
+DIVIDER
+ARROW
+PIPE
+SEMI
+ID
+TERMINAL_LABEL
+NONTERMINAL_LABEL
+GRAMMAR_LABEL
+EMPTY
+
+===== nt
+grammar
+section
+termSection
+nonTermSection
+grammarSection
+termList
+productionList
+production
+rhsList
+rhsListTail
+
+===== g
+grammar =>          termSection nonTermSection grammarSection ;
+
+termSection =>      DIVIDER TERMINAL_LABEL termList ;
+
+nonTermSection =>   DIVIDER NONTERMINAL_LABEL termList ;
+
+termList =>         ID termList |
+                    e ;
+
+grammarSection =>   DIVIDER GRAMMAR_LABEL productionList ;
+
+productionList =>   production productionList |
+                    e ;
+
+production =>       ID ARROW rhsList SEMI ;
+
+rhsList =>          ID PIPE rhsListTail |
+                    e ;
+
+rhsListTail =>      ID |
+                    ID PIPE rhsListTail ;

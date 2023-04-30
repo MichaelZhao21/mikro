@@ -1,0 +1,216 @@
+===== t
+ID
+CLASS
+LCURLY
+RCURLY
+LPAREN
+RPAREN
+EXTENDS
+VAR
+SEMI
+ASSIGN
+FOR
+IF
+ELSE
+PRINT
+RETURN
+WHILE
+OR
+AND
+NOTEQ
+EQ
+GT
+LT
+GTE
+LTE
+MINUS
+PLUS
+MULT
+DIV
+NOT
+NEGATE
+TRUE
+FALSE
+NIL
+THIS
+NUMBERLIT
+STRINGLIT
+SUPER
+DOT
+COMMA
+FUN
+
+===== nt
+program
+declerationList
+decleration
+classDecl
+funDecl
+varDecl
+statement
+exprStmt
+forStmt
+forFirst
+optExpression
+ifStmt
+optElse
+printStmt
+returnStmt
+whileStmt
+block
+expression
+assignment
+optCall
+logicOr
+orList
+logicAnd
+andList
+equality
+comparisonList
+comparison
+termList
+term
+factorList
+factor
+unaryList
+unary
+call
+callList
+primary
+functionList
+function
+optParameters
+parameterList
+arguments
+argumentList
+
+===== g
+program =>          declerationList ;
+
+declerationList =>  decleration declerationList |
+                    e ;
+
+decleration =>      classDecl |
+                    funDecl |
+                    varDecl |
+                    statement ;
+
+classDecl =>        CLASS ID LCURLY functionList RCURLY |
+                    CLASS ID EXTENDS ID LCURLY functionList RCURLY ;
+
+functionList =>     function functionList |
+                    e ;
+
+funDecl =>          FUN function ;
+
+varDecl =>          VAR ID SEMI |
+                    VAR ID ASSIGN expression ;
+
+statement =>        exprStmt |
+                    forStmt |
+                    ifStmt |
+                    printStmt |
+                    returnStmt |
+                    whileStmt |
+                    block ;
+
+exprStmt =>         expression ;
+
+forStmt =>          FOR LPAREN forFirst optExpression optExpression RPAREN statement ;
+
+forFirst =>         varDecl |
+                    exprStmt |
+                    SEMI ;
+
+optExpression =>    expression |
+                    e ;
+
+ifStmt =>           IF LPAREN expression RPAREN statement optElse ;
+
+optElse =>          ELSE statement |
+                    e ;
+
+printStmt =>        PRINT statement SEMI ;
+
+returnStmt =>       RETURN optExpression SEMI ;
+
+whileStmt =>        WHILE LPAREN expression RPAREN statement ;
+
+block =>            LCURLY declerationList RCURLY ;
+
+expression =>       assignment ;
+
+assignment =>       optCall ID ASSIGN assignment | 
+                    logicOr ;
+
+optCall =>          call DOT |
+                    e ;
+
+logicOr =>          logicAnd orList ;
+
+orList =>           OR logicAnd orList |
+                    e ;
+
+logicAnd =>         equality andList ;
+
+andList =>          AND equality andList |
+                    e ;
+
+equality =>         comparison comparisonList ;
+
+comparisonList =>   NOTEQ comparison comparisonList |
+                    EQ comparison comparisonList |
+                    e ;
+
+comparison =>       term termList ;
+
+termList =>         GT term termList |
+                    LT term termList |
+                    GTE term termList |
+                    LTE term termList |
+                    e ;
+
+term =>             factor factorList ;
+
+factorList =>       MINUS factor factorList |
+                    PLUS factor factorList |
+                    e ;
+
+factor =>           unary unaryList ;
+
+unaryList =>        DIV unary |
+                    MULT unary |
+                    e ;
+
+unary =>            NOT unary |
+                    NEGATE unary |
+                    call ;
+                
+call =>             primary callList ;
+
+callList =>         LPAREN arguments RPAREN callList |
+                    DOT ID callList ;
+
+primary =>          TRUE |
+                    FALSE |
+                    NIL |
+                    THIS |
+                    NUMBERLIT |
+                    STRINGLIT |
+                    ID |
+                    LPAREN expression RPAREN |
+                    SUPER DOT ID ;
+
+function =>         ID LPAREN optParameters RPAREN block ;
+
+optParameters =>    ID parameterList |
+                    e ;
+
+parameterList =>    COMMA ID parameterList |
+                    e ;
+
+arguments =>        expression argumentList |
+                    e ;
+
+argumentList =>     COMMA expression argumentList |
+                    e ;

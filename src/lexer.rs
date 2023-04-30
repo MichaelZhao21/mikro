@@ -76,24 +76,24 @@ pub fn lex(text: String) -> Result<Vec<Token>, Box<dyn Error>> {
     Ok(tokens)
 }
 
-struct LexString {
-    curr_str: Vec<char>,
-    is_string: bool,
+pub struct LexString {
+    pub curr_str: Vec<char>,
+    pub is_string: bool,
 }
 
 impl LexString {
-    fn new() -> Self {
+    pub fn new() -> Self {
         Self {
             curr_str: Vec::new(),
             is_string: false,
         }
     }
 
-    fn push(&mut self, c: char) {
+    pub fn push(&mut self, c: char) {
         self.curr_str.push(c);
     }
 
-    fn done(&mut self) -> String {
+    pub fn done(&mut self) -> String {
         let s = self.curr_str.iter().collect();
 
         // Clear the current string
@@ -104,7 +104,7 @@ impl LexString {
         s
     }
 
-    fn is_empty(&self) -> bool {
+    pub fn is_empty(&self) -> bool {
         self.curr_str.is_empty()
     }
 }
