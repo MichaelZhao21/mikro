@@ -336,10 +336,18 @@ impl Symbol {
         Self { name, is_terminal }
     }
 
-    /// Returns an empty symbol, which is used for None types
+    /// Returns an null symbol, which is used for None types
     pub fn none() -> Self {
         Self {
             name: "".to_string(),
+            is_terminal: true,
+        }
+    }
+
+    /// Returns an empty symbol
+    pub fn empty() -> Self {
+        Self {
+            name: "e".to_string(),
             is_terminal: true,
         }
     }
@@ -436,3 +444,26 @@ impl Display for State {
         Ok(())
     }
 }
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct Action {
+    pub action_type: ActionType,
+    pub state: usize,
+}
+
+impl Action {
+    pub fn new(action_type: ActionType, state: usize) -> Self {
+        Self { action_type, state }
+    }
+}
+
+impl Copy for Action {}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub enum ActionType {
+    Shift,
+    Reduce,
+    Accept,
+}
+
+impl Copy for ActionType {}

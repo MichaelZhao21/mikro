@@ -3,7 +3,7 @@ use std::{cell::RefCell, rc::Rc};
 use crate::generator::{
     grammar_parser::{parse_grammar, validate_grammar},
     lexer::lex_grammar,
-    parser::generate_states,
+    parser::{generate_states, generate_first},
     types::{Production, State, Symbol, Term},
 };
 
@@ -21,10 +21,24 @@ pub fn generate_parser(text: String) {
     // Validate grammar (no duplicate productions, no duplicate terminals, etc.)
     validate_grammar(&grammar);
 
+    // Generate the FIRST and FOLLOW sets
+    let first = generate_first(&grammar);
+
     // Print the grammar section
     println!("Grammar ===================");
     for prod in &grammar.grammar_section {
         println!("{}", prod);
+    }
+    println!("===========================\n");
+
+    // Print the FIRST sets
+    println!("FIRST sets =================");
+    for (term, set) in &first {
+        print!("FIRST({}) = ", term);
+        for sym in set {
+            print!("{} ", sym);
+        }
+        println!("");
     }
     println!("===========================\n");
 

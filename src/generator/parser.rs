@@ -1,6 +1,10 @@
-use std::{cell::RefCell, collections::HashSet, rc::Rc};
+use std::{
+    cell::RefCell,
+    collections::{HashMap, HashSet},
+    rc::Rc,
+};
 
-use super::types::{Grammar, Production, State, Symbol};
+use super::types::{Action, Grammar, Production, State, Symbol};
 
 pub fn generate_states(grammar: &Grammar, states: Rc<RefCell<Vec<State>>>) {
     // Get the closure for the first state
@@ -84,4 +88,117 @@ pub fn get_state_from_prod(states: &Vec<State>, prod: &Production) -> Option<usi
         }
     }
     None
+}
+
+pub fn generate_first(grammar: &Grammar) -> HashMap<String, HashSet<Symbol>> {
+    let mut first_set = HashMap::<String, HashSet<Symbol>>::new();
+
+    // Add all terminals to the FIRST set, which is just the terminal itself
+    for term in &grammar.term_section {
+        first_set.insert(term.str.clone(), HashSet::new());
+        first_set
+            .get_mut(&term.str)
+            .unwrap()
+            .insert(Symbol::new(term.str.clone(), true));
+    }
+
+    // Add all nonterminals to the FIRST set
+    for term in &grammar.nonterm_section {
+        first_set.insert(term.str.clone(), HashSet::new());
+    }
+
+    // Repeat until no more changes are made
+    let mut changed = true;
+    while changed {
+        changed = false;
+
+        // Iterate through the productions
+        for prod in &grammar.grammar_section {
+            // Check if the production derives empty
+            if prod.is_complete() {
+                if first_set.get(&prod.lhs).unwrap().contains(&Symbol::empty()) {
+                    continue;
+                } else {
+                    first_set
+                        .get_mut(&prod.lhs)
+                        .unwrap()
+                        .insert(Symbol::empty());
+                    changed = true;
+                }
+            }
+
+            // Flag to see if we broke out of the loop early
+            let mut empty_flag = true;
+
+            // Iterate through the symbols in the production until we hit a terminal
+            // or the end of the production
+            for sym in prod.rhs.iter() {
+                // Check if the FIRST of the current symbol is a subset of the FIRST of the LHS's symbol
+                if !is_subset(
+                    first_set.get(&sym.name).unwrap(),
+                    first_set.get(&prod.lhs).unwrap(),
+                ) {
+                    // If not, add the FIRST of the current symbol to the FIRST of the LHS's symbol
+                    let first_sym = first_set.get(&sym.name).unwrap().clone();
+                    first_set.get_mut(&prod.lhs).unwrap().extend(first_sym);
+
+                    // Check if the current symbol derives empty
+                    changed = true;
+                }
+
+                // Check if the current symbol derives empty
+                // If not, break out of the loop
+                if !first_set.get(&sym.name).unwrap().contains(&Symbol::empty()) {
+                    empty_flag = false;
+                    break;
+                }
+            }
+
+            // If we did not break out of the loop, that means that all symbols derive empty
+            // Add empty to the FIRST of the LHS's symbol
+            if empty_flag {
+                // Make sure empty is not already in the FIRST set
+                if !first_set.get(&prod.lhs).unwrap().contains(&Symbol::empty()) {
+                    first_set
+                        .get_mut(&prod.lhs)
+                        .unwrap()
+                        .insert(Symbol::empty());
+                    changed = true;
+                }
+            }
+        }
+    }
+
+    first_set
+}
+
+pub fn is_subset(sub_set: &HashSet<Symbol>, super_set: &HashSet<Symbol>) -> bool {
+    for sym in sub_set {
+        if !super_set.contains(sym) {
+            return false;
+        }
+    }
+    true
+}
+
+pub fn generate_slr_table(grammar: &Grammar, states: &Vec<State>) {
+    // Create the ACTION table
+    let mut action_table =
+        vec![vec![None as Option<Action>; grammar.term_section.len() + 1]; states.len()];
+
+    // Create the GOTO table
+    let mut goto_table =
+        vec![vec![None as Option<usize>; grammar.nonterm_section.len()]; states.len()];
+
+    // Iterate through the states
+    for (i, state) in states.iter().enumerate() {
+        // Iterate through the productions in the state
+        for prod in &state.productions {
+            // Check if the production is complete
+            if prod.is_complete() {}
+
+            // Check if the current production is at a terminal
+            // if prod.next_sym().unwrap()
+        }
+    }
 }
