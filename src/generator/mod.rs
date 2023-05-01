@@ -3,8 +3,8 @@ use std::{cell::RefCell, rc::Rc};
 use crate::generator::{
     grammar_parser::{parse_grammar, validate_grammar},
     lexer::lex_grammar,
-    parser::{generate_states, generate_first, generate_follow},
-    types::{Production, State, Symbol, Term},
+    parser::{generate_first, generate_follow, generate_slr_table, generate_states},
+    types::{ActionType, Production, State, Symbol, Term},
 };
 
 pub mod grammar_parser;
@@ -80,10 +80,42 @@ pub fn generate_parser(text: String) {
     // Generate closures for all states
     generate_states(&grammar, Rc::clone(&states));
 
-    // Unwrap the states
+    // Print the states
     let states = Rc::try_unwrap(states).unwrap().into_inner();
-
     for state in states.iter() {
         println!("{}", state);
     }
+
+    // Create an augmented list of terminals with the EOF symbol
+    let mut term_section = grammar.term_section.clone();
+    term_section.push(Term {
+        str: String::from("$"),
+    });
+
+    // Generate the SLR parsing table
+    let (action_table, goto_table) = generate_slr_table(&grammar, &states, &first, &follow);
+
+    // Print the SLR parsing table
+    println!("===== SLR parsing table ====");
+    println!("Action table:");
+    // Print header
+    print!("      ");
+    for term in &term_section {
+        print!("{:<5.5} ", term.str);
+    }
+    println!("");
+    for (state, row) in action_table.iter().enumerate() {
+        print!("{:<4}| ", state);
+        for action in row.iter() {
+            match action {
+                Some(action) => {
+                    print!("{}", action);
+                }
+                None => print!("{} ", "-    "),
+            }
+        }
+        println!("");
+    }
+
+    // println!("{:.4}", "bruhman".to_string());
 }

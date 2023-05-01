@@ -94,7 +94,7 @@ impl Parseable for Grammar {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Term {
     pub str: String,
 }
@@ -111,7 +111,13 @@ impl Parseable for Term {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+impl Display for Term {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.str)
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct Production {
     pub lhs: String,
     pub rhs: Vec<Symbol>,
@@ -437,6 +443,13 @@ impl State {
             self.add_productions(new_prods.clone());
         }
     }
+
+    pub fn get_next_state(&self, prod: &Production) -> usize {
+        self.transitions
+            .get(&prod.next_sym().unwrap())
+            .unwrap()
+            .clone()
+    }
 }
 
 impl Display for State {
@@ -456,16 +469,45 @@ impl Display for State {
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct Action {
     pub action_type: ActionType,
-    pub state: usize,
+    pub shift_state: Option<usize>,
+    pub reduce_prod: Option<Production>,
 }
 
 impl Action {
-    pub fn new(action_type: ActionType, state: usize) -> Self {
-        Self { action_type, state }
+    pub fn new(
+        action_type: ActionType,
+        shift_state: Option<usize>,
+        reduce_prod: Option<Production>,
+    ) -> Self {
+        Self {
+            action_type,
+            shift_state,
+            reduce_prod,
+        }
+    }
+
+    pub fn shift(shift_state: usize) -> Self {
+        Self::new(ActionType::Shift, Some(shift_state), None)
+    }
+
+    pub fn reduce(reduce_prod: Production) -> Self {
+        Self::new(ActionType::Reduce, None, Some(reduce_prod))
+    }
+
+    pub fn accept() -> Self {
+        Self::new(ActionType::Accept, None, None)
     }
 }
 
-impl Copy for Action {}
+impl Display for Action {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self.action_type {
+            ActionType::Shift => write!(f, "s{:<5}", self.shift_state.unwrap()),
+            ActionType::Reduce => write!(f, "r{:4.4} ", self.reduce_prod.as_ref().unwrap().lhs),
+            ActionType::Accept => write!(f, "Accept"),
+        }
+    }
+}
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum ActionType {
@@ -474,4 +516,12 @@ pub enum ActionType {
     Accept,
 }
 
-impl Copy for ActionType {}
+impl Display for ActionType {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            ActionType::Shift => write!(f, "Shift"),
+            ActionType::Reduce => write!(f, "Reduce"),
+            ActionType::Accept => write!(f, "Accept"),
+        }
+    }
+}

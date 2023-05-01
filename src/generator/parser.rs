@@ -4,7 +4,7 @@ use std::{
     rc::Rc,
 };
 
-use super::types::{Action, Grammar, Production, State, Symbol};
+use super::types::{Action, ActionType, Grammar, Production, State, Symbol};
 
 pub fn generate_states(grammar: &Grammar, states: Rc<RefCell<Vec<State>>>) {
     // Get the closure for the first state
@@ -260,7 +260,11 @@ pub fn generate_follow(
                 }
 
                 // If the current symbol does not derive empty, break
-                if !first_set.get(&prod.rhs[i].name).unwrap().contains(&Symbol::empty()) {
+                if !first_set
+                    .get(&prod.rhs[i].name)
+                    .unwrap()
+                    .contains(&Symbol::empty())
+                {
                     break;
                 }
             }
@@ -276,7 +280,12 @@ pub fn generate_follow(
     follow_set
 }
 
-pub fn generate_slr_table(grammar: &Grammar, states: &Vec<State>) {
+pub fn generate_slr_table(
+    grammar: &Grammar,
+    states: &Vec<State>,
+    first: &HashMap<String, HashSet<Symbol>>,
+    follow: &HashMap<String, HashSet<Symbol>>,
+) -> (Vec<Vec<Option<Action>>>, Vec<Vec<Option<usize>>>) {
     // Create the ACTION table
     let mut action_table =
         vec![vec![None as Option<Action>; grammar.term_section.len() + 1]; states.len()];
@@ -285,15 +294,132 @@ pub fn generate_slr_table(grammar: &Grammar, states: &Vec<State>) {
     let mut goto_table =
         vec![vec![None as Option<usize>; grammar.nonterm_section.len()]; states.len()];
 
+    // Get the pseudo start symbol
+    let pseudo_start = grammar.grammar_section[0].lhs.clone();
+
     // Iterate through the states
     for (i, state) in states.iter().enumerate() {
         // Iterate through the productions in the state
         for prod in &state.productions {
             // Check if the production is complete
-            if prod.is_complete() {}
+            if prod.is_complete() {
+                // If this is the start state, accept
+                if prod.lhs == pseudo_start {
+                    action_table[i][grammar.term_section.len()] = Some(Action::accept());
+                } else {
+                    // Otherwise, reduce
+                    for term in &follow[&prod.lhs] {
+                        let j = get_term_index(&term.name, grammar);
 
-            // Check if the current production is at a terminal
-            // if prod.next_sym().unwrap()
+                        // Create the new reduce action
+                        let reduce_action = Action::reduce(prod.clone());
+
+                        // Check to make sure there is no conflict
+                        if action_table[i][j].is_some()
+                            && has_conflict(action_table[i][j].as_ref().unwrap(), &reduce_action)
+                        {
+                            let curr_action = action_table[i][j].as_ref().unwrap();
+                            print_conflict(
+                                i,
+                                &term.name,
+                                &curr_action.action_type,
+                                &ActionType::Reduce,
+                            );
+                        }
+
+                        // Add the reduce action
+                        action_table[i][j] = Some(Action::reduce(prod.clone()));
+                    }
+                }
+
+                // Continue to the next production
+                continue;
+            }
+
+            // If the next symbol is a nonterminal, ignore
+            if !prod.next_sym().unwrap().is_terminal {
+                continue;
+            }
+
+            // Get the index of the next symbol
+            let j = get_term_index(&prod.next_sym().unwrap().name, grammar);
+
+            // Create the new shift action
+            let shift_action = Action::shift(state.get_next_state(prod));
+
+            // Check to make sure there is no conflict
+            if action_table[i][j].is_some()
+                && has_conflict(action_table[i][j].as_ref().unwrap(), &shift_action)
+            {
+                let curr_action = action_table[i][j].as_ref().unwrap();
+                print_conflict(
+                    i,
+                    &prod.next_sym().unwrap().name,
+                    &curr_action.action_type,
+                    &ActionType::Shift,
+                );
+            }
+
+            // Add the shift action
+            action_table[i][j] = Some(shift_action);
         }
     }
+
+    // Return the tables
+    (action_table, goto_table)
+}
+
+pub fn get_term_index(term: &String, grammar: &Grammar) -> usize {
+    // Check if the term is the EOF symbol
+    if term == "$" {
+        return grammar.term_section.len();
+    }
+
+    // Iterate through the terms
+    for (i, t) in grammar.term_section.iter().enumerate() {
+        if t.str == *term {
+            return i;
+        }
+    }
+
+    // If the term is not found, panic
+    panic!("{:?} - Term not found", term);
+}
+
+pub fn has_conflict(action_1: &Action, action_2: &Action) -> bool {
+    // Check if the actions types are the same and if not return true
+    if action_1.action_type != action_2.action_type {
+        return true;
+    }
+
+    // Check if the actions are both shifts
+    if action_1.action_type == ActionType::Shift {
+        // If so, check if the states are the same and if not return true
+        if action_1.shift_state != action_2.shift_state {
+            return true;
+        }
+    }
+
+    // Check if the actions are both reduces
+    if action_1.action_type == ActionType::Reduce {
+        // If so, check if the productions are the same and if not return true
+        if action_1.reduce_prod != action_2.reduce_prod {
+            return true;
+        }
+    }
+
+    // If no conflicts are found, return false
+    false
+}
+
+pub fn print_conflict(
+    state: usize,
+    term: &String,
+    action_type_1: &ActionType,
+    action_type_2: &ActionType,
+) {
+    panic!(
+        "{}/{} conflict at state {} on term {}",
+        action_type_1, action_type_2, state, term
+    );
 }
