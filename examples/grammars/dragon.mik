@@ -1,0 +1,27 @@
+===== t
+PLUS
+MULT
+LPAREN
+RPAREN
+ID
+
+===== nt
+expression
+expressionTail
+term
+termTail
+factor
+
+===== g
+expression =>       term expressionTail ;
+
+expressionTail =>   PLUS term expressionTail |
+                    e ;
+
+term =>             factor termTail ;
+
+termTail =>         MULT factor termTail |
+                    e ;
+
+factor =>           LPAREN expression RPAREN |
+                    ID ;
