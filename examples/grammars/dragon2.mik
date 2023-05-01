@@ -1,0 +1,21 @@
+===== t
+PLUS
+MULT
+LPAREN
+RPAREN
+ID
+
+===== nt
+expression
+term
+factor
+
+===== g
+expression =>   expression PLUS term |
+                term ;
+
+term =>         term MULT factor |
+                factor ;
+
+factor =>       LPAREN expression RPAREN |
+                ID ;
