@@ -181,6 +181,101 @@ pub fn is_subset(sub_set: &HashSet<Symbol>, super_set: &HashSet<Symbol>) -> bool
     true
 }
 
+pub fn generate_follow(
+    grammar: &Grammar,
+    first_set: &HashMap<String, HashSet<Symbol>>,
+) -> HashMap<String, HashSet<Symbol>> {
+    let mut follow_set = HashMap::<String, HashSet<Symbol>>::new();
+
+    // Add all nonterminals to the FOLLOW set
+    for term in &grammar.nonterm_section {
+        follow_set.insert(term.str.clone(), HashSet::new());
+    }
+
+    // Place EOF in the follow set of the start symbol
+    follow_set
+        .get_mut(&grammar.grammar_section[0].lhs)
+        .unwrap()
+        .insert(Symbol::eof());
+
+    // Repeat until no more changes are made
+    let mut changed = true;
+    while changed {
+        changed = false;
+
+        // Iterate through the productions
+        for prod in &grammar.grammar_section {
+            let prod_size = prod.rhs.len();
+
+            // Ignore empty productions
+            if prod_size == 0 {
+                continue;
+            }
+
+            // Iterate through the symbols in the production
+            for i in 0..(prod_size - 1) {
+                // If the current symbol is a terminal, skip it
+                if prod.rhs[i].is_terminal {
+                    continue;
+                }
+
+                // Check if the FIRST set of the next symbol is a subset of the FOLLOW set of the current symbol
+                if !is_subset(
+                    first_set.get(&prod.rhs[i + 1].name).unwrap(),
+                    follow_set.get(&prod.rhs[i].name).unwrap(),
+                ) {
+                    // If not, add the FIRST set of the next symbol to the FOLLOW set of the current symbol
+                    let next_first_set = first_set.get(&prod.rhs[i + 1].name).unwrap().clone();
+                    follow_set
+                        .get_mut(&prod.rhs[i].name)
+                        .unwrap()
+                        .extend(next_first_set);
+
+                    // Check if the next symbol derives empty
+                    changed = true;
+                }
+            }
+
+            // Iterate through the symbols in the production in reverse order!
+            for i in (0..prod_size).rev() {
+                // Break if the current symbol is a terminal
+                if prod.rhs[i].is_terminal {
+                    break;
+                }
+
+                // Check if FOLLOW set of the LHS is a subset of the FOLLOW set of the current symbol
+                if !is_subset(
+                    follow_set.get(&prod.lhs).unwrap(),
+                    follow_set.get(&prod.rhs[i].name).unwrap(),
+                ) {
+                    // If not, add the FOLLOW set of the LHS to the FOLLOW set of the current symbol
+                    let lhs_follow_set = follow_set.get(&prod.lhs).unwrap().clone();
+                    follow_set
+                        .get_mut(&prod.rhs[i].name)
+                        .unwrap()
+                        .extend(lhs_follow_set.clone());
+
+                    // Check if the next symbol derives empty
+                    changed = true;
+                }
+
+                // If the current symbol does not derive empty, break
+                if !first_set.get(&prod.rhs[i].name).unwrap().contains(&Symbol::empty()) {
+                    break;
+                }
+            }
+        }
+    }
+
+    // Iterate through the FOLLOW sets
+    for (_, set) in follow_set.iter_mut() {
+        // Remove empty from the FOLLOW set
+        set.remove(&Symbol::empty());
+    }
+
+    follow_set
+}
+
 pub fn generate_slr_table(grammar: &Grammar, states: &Vec<State>) {
     // Create the ACTION table
     let mut action_table =

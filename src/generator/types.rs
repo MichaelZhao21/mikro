@@ -351,6 +351,14 @@ impl Symbol {
             is_terminal: true,
         }
     }
+
+    /// Returns a symbol representing the end of the file
+    pub fn eof() -> Self {
+        Self {
+            name: "$".to_string(),
+            is_terminal: true,
+        }
+    }
 }
 
 #[derive(Debug, Clone)]
