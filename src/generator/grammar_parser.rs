@@ -49,17 +49,39 @@ pub fn validate_grammar(grammar: &Grammar) {
     }
 
     // Check to make sure all terminals and nonterminals in the productions are defined
+    let mut prod_terminals = Vec::<String>::new();
+    let mut prod_nonterminals = Vec::<String>::new();
     for prod in &grammar.grammar_section {
         for sym in &prod.rhs {
             if sym.is_terminal {
                 if !terminals.contains(&sym.name) {
                     panic!("Undefined terminal: {}", sym.name);
                 }
+                prod_terminals.push(sym.name.clone());
             } else {
                 if !nonterminals.contains(&sym.name) {
                     panic!("Undefined nonterminal: {}", sym.name);
                 }
+                prod_nonterminals.push(sym.name.clone());
             }
+        }
+
+        // Check lhs
+        if !nonterminals.contains(&prod.lhs) {
+            panic!("Undefined nonterminal: {}", prod.lhs);
+        }
+        prod_nonterminals.push(prod.lhs.clone());
+    }
+    
+    // Check for unused terminals and nonterminals
+    for term in &grammar.term_section {
+        if !prod_terminals.contains(&term.str) && term.str != "e" {
+            panic!("Unused terminal: {}", term.str);
+        }
+    }
+    for term in &grammar.nonterm_section {
+        if !prod_nonterminals.contains(&term.str) {
+            panic!("Unused nonterminal: {}", term.str);
         }
     }
 }

@@ -7,11 +7,9 @@ ID
 TERMINAL_LABEL
 NONTERMINAL_LABEL
 GRAMMAR_LABEL
-EMPTY
 
 ===== nt
 grammar
-section
 termSection
 nonTermSection
 grammarSection
