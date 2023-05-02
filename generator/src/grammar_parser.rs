@@ -1,7 +1,5 @@
-use crate::lexer::Loc;
-
-use super::types::{
-    GeneratorToken, GeneratorTokenType, Grammar, Parseable, Production, TokenStream,
+use crate::types::{
+    GeneratorToken, GeneratorTokenType, Grammar, Loc, Parseable, Production, TokenStream,
 };
 
 pub fn parse_grammar(tokens: Vec<GeneratorToken>) -> Grammar {
@@ -72,7 +70,7 @@ pub fn validate_grammar(grammar: &Grammar) {
         }
         prod_nonterminals.push(prod.lhs.clone());
     }
-    
+
     // Check for unused terminals and nonterminals
     for term in &grammar.term_section {
         if !prod_terminals.contains(&term.str) && term.str != "e" {

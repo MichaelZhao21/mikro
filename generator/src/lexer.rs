@@ -1,4 +1,4 @@
-use crate::lexer::{LexString, Loc};
+use crate::types::{LexString, Loc};
 
 use super::types::GeneratorToken;
 

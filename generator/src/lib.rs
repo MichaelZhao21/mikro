@@ -1,18 +1,71 @@
-use std::{cell::RefCell, rc::Rc};
+extern crate proc_macro;
 
-use crate::generator::{
+use proc_macro::TokenStream;
+use quote::quote;
+use syn::{DeriveInput, Attribute};
+use types::Action;
+
+use crate::{
     grammar_parser::{parse_grammar, validate_grammar},
     lexer::lex_grammar,
     parser::{generate_first, generate_follow, generate_slr_table, generate_states},
     types::{Production, State, Symbol, Term},
 };
+use std::{cell::RefCell, rc::Rc, fs};
 
-pub mod grammar_parser;
-pub mod lexer;
-pub mod parser;
-pub mod types;
+mod grammar_parser;
+mod lexer;
+mod parser;
+mod types;
 
-pub fn generate_parser(text: String) {
+#[proc_macro_derive(Parser, attributes(grammar))]
+pub fn parser_macro(input: TokenStream) -> TokenStream {
+    // Get input_file derive custom attribute
+    let ast: DeriveInput = syn::parse2(input.into()).unwrap();
+    let filenames: Vec<&Attribute> = ast
+        .attrs
+        .iter()
+        .filter(|attr| {
+            let path = attr.meta.path();
+            path.is_ident("grammar")
+        })
+        .collect();
+
+    // Make sure there's only 1 filename
+    if filenames.len() != 1 {
+        panic!("Must have exactly 1 grammar attribute");
+    }
+
+    // Get the filename
+    let filename = match filenames[0]
+        .meta
+        .require_name_value()
+        .unwrap()
+        .value
+        .clone()
+    {
+        syn::Expr::Lit(s) => match s.lit {
+            syn::Lit::Str(s) => s.value(),
+            _ => panic!("grammar attribute must be a string"),
+        },
+        _ => panic!("grammar attribute must be a string"),
+    };
+
+    // Read the file and get the name from the file
+    let text = fs::read_to_string(&filename).unwrap();
+
+    // Generate the parser
+    generate_parser(text);
+
+    // Generate the output
+    let out = quote! {
+
+    };
+
+    out.into()
+}
+
+fn generate_parser(text: String) -> (Vec<Term>, Vec<Term>, Vec<Production>, Vec<Vec<Option<Action>>>, Vec<Vec<Option<usize>>>) {
     let tokens = lex_grammar(text).unwrap();
 
     // Perform a top-down recursive descent parse of the grammar
@@ -107,8 +160,8 @@ pub fn generate_parser(text: String) {
     for (i, prod) in grammar.grammar_section.iter().enumerate() {
         println!("{}: {}", i, prod);
     }
-
     println!("===========================\n");
+
     // Print the SLR parsing table
     println!("===== SLR parsing table ====");
     println!("Action table:");
@@ -151,4 +204,6 @@ pub fn generate_parser(text: String) {
     }
     println!("===========================\n");
 
+    // Return the index vectors and the parsing tables
+    (term_index, nonterm_index, prod_index, action_table, goto_table)
 }

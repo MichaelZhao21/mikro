@@ -3,8 +3,6 @@ use std::{
     fmt::{self, Display, Formatter},
 };
 
-use crate::lexer::Loc;
-
 pub struct TokenStream {
     pub tokens: Vec<GeneratorToken>,
     pub index: usize,
@@ -267,6 +265,51 @@ impl fmt::Display for GeneratorToken {
             Some(value) => write!(f, "{} {:?}({})", self.loc, self.token_type, value),
             None => write!(f, "{} {:?}", self.loc, self.token_type),
         }
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
+pub struct Loc {
+    pub row: usize,
+    pub col: usize,
+}
+
+impl fmt::Display for Loc {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "[{}, {}]", self.row, self.col)
+    }
+}
+
+pub struct LexString {
+    pub curr_str: Vec<char>,
+    pub is_string: bool,
+}
+
+impl LexString {
+    pub fn new() -> Self {
+        Self {
+            curr_str: Vec::new(),
+            is_string: false,
+        }
+    }
+
+    pub fn push(&mut self, c: char) {
+        self.curr_str.push(c);
+    }
+
+    pub fn done(&mut self) -> String {
+        let s = self.curr_str.iter().collect();
+
+        // Clear the current string
+        self.curr_str.clear();
+        self.is_string = false;
+
+        // Return the string
+        s
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.curr_str.is_empty()
     }
 }
 

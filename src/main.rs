@@ -1,4 +1,9 @@
-use mikro::generator;
+use generator::Parser;
+use mikro::lexer;
+
+#[derive(Parser)]
+#[grammar = "examples/grammars/dragon.mik"]
+struct DragonParser;
 
 fn main() {
     let args = std::env::args().collect::<Vec<_>>();
@@ -12,15 +17,11 @@ fn main() {
     // Read the input file
     let text = std::fs::read_to_string(&args[1]).unwrap();
 
-    generator::generate_parser(text);
-
-    return;
-
     // Call the lexer
-    // let tokens = lexer::lex(text).unwrap();
+    let tokens = lexer::lex(text).unwrap();
     
     // Print the tokens
-    // for token in tokens {
-        // println!("{}", token);
-    // }
+    for token in tokens {
+        println!("{}", token);
+    }
 }

@@ -7,21 +7,15 @@ ID
 
 ===== nt
 expression
-expressionTail
 term
-termTail
 factor
 
 ===== g
-expression =>       term expressionTail ;
+expression =>   expression PLUS term |
+                term ;
 
-expressionTail =>   PLUS term expressionTail |
-                    e ;
+term =>         term MULT factor |
+                factor ;
 
-term =>             factor termTail ;
-
-termTail =>         MULT factor termTail |
-                    e ;
-
-factor =>           LPAREN expression RPAREN |
-                    ID ;
+factor =>       LPAREN expression RPAREN |
+                ID ;
