@@ -97,7 +97,7 @@ pub fn generate_parser(text: String) {
     let nonterm_index = grammar.nonterm_section.clone();
 
     // Create a numbered list of productions
-    let mut prod_index = grammar.grammar_section.clone();
+    let prod_index = grammar.grammar_section.clone();
 
     // Generate the SLR parsing table
     let (action_table, goto_table) = generate_slr_table(&grammar, &states, &follow);
