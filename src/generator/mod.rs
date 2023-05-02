@@ -4,7 +4,7 @@ use crate::generator::{
     grammar_parser::{parse_grammar, validate_grammar},
     lexer::lex_grammar,
     parser::{generate_first, generate_follow, generate_slr_table, generate_states},
-    types::{ActionType, Production, State, Symbol, Term},
+    types::{Production, State, Symbol, Term},
 };
 
 pub mod grammar_parser;
@@ -86,21 +86,35 @@ pub fn generate_parser(text: String) {
         println!("{}", state);
     }
 
-    // Create an augmented list of terminals with the EOF symbol
-    let mut term_section = grammar.term_section.clone();
-    term_section.push(Term {
+    // Create an augmented list of terminals with the EOF symbol without the epsilon symbol
+    let mut term_index = grammar.term_section.clone();
+    term_index.remove(term_index.len() - 1);
+    term_index.push(Term {
         str: String::from("$"),
     });
 
-    // Generate the SLR parsing table
-    let (action_table, goto_table) = generate_slr_table(&grammar, &states, &first, &follow);
+    // Create a list of non-terminals
+    let nonterm_index = grammar.nonterm_section.clone();
 
+    // Create a numbered list of productions
+    let mut prod_index = grammar.grammar_section.clone();
+
+    // Generate the SLR parsing table
+    let (action_table, goto_table) = generate_slr_table(&grammar, &states, &follow);
+
+    // Print the grammar section
+    println!("====== Grammar =============");
+    for (i, prod) in grammar.grammar_section.iter().enumerate() {
+        println!("{}: {}", i, prod);
+    }
+
+    println!("===========================\n");
     // Print the SLR parsing table
     println!("===== SLR parsing table ====");
     println!("Action table:");
     // Print header
     print!("      ");
-    for term in &term_section {
+    for term in &term_index {
         print!("{:<5.5} ", term.str);
     }
     println!("");
@@ -109,13 +123,32 @@ pub fn generate_parser(text: String) {
         for action in row.iter() {
             match action {
                 Some(action) => {
-                    print!("{}", action);
+                    print!("{}", action.print_table(&prod_index));
                 }
                 None => print!("{} ", "-    "),
             }
         }
         println!("");
     }
+    println!("\nGoto table:");
+    // Print header
+    print!("      ");
+    for nonterm in &nonterm_index {
+        print!("{:<5.5} ", nonterm.str);
+    }
+    println!("");
+    for (state, row) in goto_table.iter().enumerate() {
+        print!("{:<4}| ", state);
+        for goto in row.iter() {
+            match goto {
+                Some(goto) => {
+                    print!("{:<6}", goto);
+                }
+                None => print!("{} ", "-    "),
+            }
+        }
+        println!("");
+    }
+    println!("===========================\n");
 
-    // println!("{:.4}", "bruhman".to_string());
 }

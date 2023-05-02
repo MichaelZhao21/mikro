@@ -13,18 +13,11 @@ pub fn generate_states(grammar: &Grammar, states: Rc<RefCell<Vec<State>>>) {
         State::new(0, grammar.grammar_section[0].clone(), grammar),
     );
 
-    // Keeps track of already generated transition symbols
-    let mut sym_set = Vec::<HashSet<Symbol>>::new();
-
-    // Add the first state to the symbol set
-    sym_set.push(HashSet::<Symbol>::new());
-
     let mut changed = true;
     while changed {
         changed = false;
 
         // Keeps track of new states added
-        let mut new_states = Vec::<State>::new();
         let mut next_state_num = states.borrow_mut().len();
 
         // Iterate through the states
@@ -38,45 +31,55 @@ pub fn generate_states(grammar: &Grammar, states: Rc<RefCell<Vec<State>>>) {
             for j in 0..prod_count {
                 let prod = &prods[j];
 
-                // Make sure production is not in a final state or already has a transition
-                if prod.is_complete()
-                    || (sym_set.len() > i && sym_set[i].contains(&prod.next_sym().unwrap()))
-                {
+                // Make sure production is not in a final state
+                if prod.is_complete() {
                     continue;
                 }
 
                 // Get the next symbol
                 let sym = prod.next_sym().unwrap();
 
-                // Add it to the symbol set
-                sym_set[i].insert(sym.clone());
-
                 // Get the updated production and advance the dot
                 let mut new_prod = prod.clone();
                 new_prod.advance();
 
-                // Get the state that the new production belongs to
-                let state_num = match get_state_from_prod(&states.borrow(), &new_prod) {
-                    Some(num) => num,
-                    None => {
-                        // If the state does not exist, create it
-                        let new_state = State::new(next_state_num, new_prod, grammar);
-                        new_states.push(new_state);
-                        sym_set.push(HashSet::new());
-                        next_state_num += 1;
-                        next_state_num - 1
-                    }
+                // Get the state that the transition belongs to
+                let state_num = match states.borrow()[i].transitions.get(&sym).cloned() {
+                    Some(num) => Some(num),
+                    None => get_state_from_prod(&states.borrow(), &new_prod),
                 };
 
-                // Add the transition to the current state
-                states.borrow_mut()[i].add_transition(sym, state_num);
+                // Check if the state exists and create it if it does not
+                if state_num.is_none() {
+                    let new_state = State::new(next_state_num, new_prod.clone(), grammar);
 
-                changed = true;
+                    // Add the new state to the list of states
+                    states.borrow_mut().push(new_state);
+
+                    // Increment the next state number
+                    next_state_num += 1;
+
+                    changed = true;
+                }
+
+                // Unwrap state num or set it to the next state number
+                let state_num = match state_num {
+                    Some(num) => num,
+                    None => next_state_num - 1,
+                };
+
+                // Check if transition exists and add the transition to the current state
+                if !states.borrow()[i].transitions.contains_key(&sym) {
+                    states.borrow_mut()[i].add_transition(sym.clone(), state_num);
+                    changed = true;
+                }
+
+                // Check if the production exists in the next state and add it if it does not
+                if !states.borrow()[state_num].productions.contains(&new_prod) {
+                    states.borrow_mut()[state_num].add_production_with_closure(new_prod, grammar);
+                    changed = true;
+                }
             }
-
-            // Add the new states to the states vector
-            states.borrow_mut().append(&mut new_states);
-            new_states.clear();
         }
     }
 }
@@ -283,12 +286,11 @@ pub fn generate_follow(
 pub fn generate_slr_table(
     grammar: &Grammar,
     states: &Vec<State>,
-    first: &HashMap<String, HashSet<Symbol>>,
     follow: &HashMap<String, HashSet<Symbol>>,
 ) -> (Vec<Vec<Option<Action>>>, Vec<Vec<Option<usize>>>) {
     // Create the ACTION table
     let mut action_table =
-        vec![vec![None as Option<Action>; grammar.term_section.len() + 1]; states.len()];
+        vec![vec![None as Option<Action>; grammar.term_section.len()]; states.len()];
 
     // Create the GOTO table
     let mut goto_table =
@@ -305,7 +307,7 @@ pub fn generate_slr_table(
             if prod.is_complete() {
                 // If this is the start state, accept
                 if prod.lhs == pseudo_start {
-                    action_table[i][grammar.term_section.len()] = Some(Action::accept());
+                    action_table[i][grammar.term_section.len() - 1] = Some(Action::accept());
                 } else {
                     // Otherwise, reduce
                     for term in &follow[&prod.lhs] {
@@ -315,20 +317,15 @@ pub fn generate_slr_table(
                         let reduce_action = Action::reduce(prod.clone());
 
                         // Check to make sure there is no conflict
-                        if action_table[i][j].is_some()
-                            && has_conflict(action_table[i][j].as_ref().unwrap(), &reduce_action)
-                        {
+                        if action_table[i][j].is_some() {
                             let curr_action = action_table[i][j].as_ref().unwrap();
-                            print_conflict(
-                                i,
-                                &term.name,
-                                &curr_action.action_type,
-                                &ActionType::Reduce,
-                            );
+                            if has_conflict(curr_action, &reduce_action) {
+                                print_conflict(i, &term.name, curr_action, &reduce_action);
+                            }
                         }
 
                         // Add the reduce action
-                        action_table[i][j] = Some(Action::reduce(prod.clone()));
+                        action_table[i][j] = Some(reduce_action);
                     }
                 }
 
@@ -348,20 +345,37 @@ pub fn generate_slr_table(
             let shift_action = Action::shift(state.get_next_state(prod));
 
             // Check to make sure there is no conflict
-            if action_table[i][j].is_some()
-                && has_conflict(action_table[i][j].as_ref().unwrap(), &shift_action)
-            {
+            if action_table[i][j].is_some() {
                 let curr_action = action_table[i][j].as_ref().unwrap();
-                print_conflict(
-                    i,
-                    &prod.next_sym().unwrap().name,
-                    &curr_action.action_type,
-                    &ActionType::Shift,
-                );
+                if has_conflict(curr_action, &shift_action) {
+                    print_conflict(
+                        i,
+                        &prod.next_sym().unwrap().name,
+                        curr_action,
+                        &shift_action,
+                    );
+                }
             }
 
             // Add the shift action
             action_table[i][j] = Some(shift_action);
+        }
+    }
+
+    // Iterate through the states
+    for (i, state) in states.iter().enumerate() {
+        // Iterate through the transitions
+        for (sym, next_state) in &state.transitions {
+            // Check if the transition is a terminal
+            if sym.is_terminal {
+                continue;
+            }
+
+            // Get the index of the nonterminal
+            let j = get_nonterminal_index(&sym.name, grammar);
+
+            // Add the goto action
+            goto_table[i][j] = Some(next_state.clone());
         }
     }
 
@@ -372,7 +386,7 @@ pub fn generate_slr_table(
 pub fn get_term_index(term: &String, grammar: &Grammar) -> usize {
     // Check if the term is the EOF symbol
     if term == "$" {
-        return grammar.term_section.len();
+        return grammar.term_section.len() - 1;
     }
 
     // Iterate through the terms
@@ -384,6 +398,18 @@ pub fn get_term_index(term: &String, grammar: &Grammar) -> usize {
 
     // If the term is not found, panic
     panic!("{:?} - Term not found", term);
+}
+
+pub fn get_nonterminal_index(nonterminal: &String, grammar: &Grammar) -> usize {
+    // Iterate through the nonterminals
+    for (i, nt) in grammar.nonterm_section.iter().enumerate() {
+        if nt.str == *nonterminal {
+            return i;
+        }
+    }
+
+    // If the nonterm is not found, panic
+    panic!("{:?} - Nonterm not found", nonterminal);
 }
 
 pub fn has_conflict(action_1: &Action, action_2: &Action) -> bool {
@@ -412,14 +438,9 @@ pub fn has_conflict(action_1: &Action, action_2: &Action) -> bool {
     false
 }
 
-pub fn print_conflict(
-    state: usize,
-    term: &String,
-    action_type_1: &ActionType,
-    action_type_2: &ActionType,
-) {
+pub fn print_conflict(state: usize, term: &String, action_1: &Action, action_2: &Action) {
     panic!(
-        "{}/{} conflict at state {} on term {}",
-        action_type_1, action_type_2, state, term
+        "{}/{} conflict at state {} on term {} - {} vs {}",
+        action_1.action_type, action_2.action_type, state, term, action_1, action_2
     );
 }

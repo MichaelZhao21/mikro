@@ -197,6 +197,10 @@ impl Production {
 
         productions
     }
+
+    pub fn eq_ignore_dot(&self, other: &Self) -> bool {
+        self.lhs == other.lhs && self.rhs == other.rhs
+    }
 }
 
 impl Parseable for Production {
@@ -393,6 +397,11 @@ impl State {
         self.productions.extend(prods);
     }
 
+    pub fn add_production_with_closure(&mut self, prod: Production, grammar: &Grammar) {
+        self.add_production(prod);
+        self.closure(grammar);
+    }
+
     pub fn add_transition(&mut self, sym: Symbol, state: usize) {
         self.transitions.insert(sym, state);
     }
@@ -497,13 +506,31 @@ impl Action {
     pub fn accept() -> Self {
         Self::new(ActionType::Accept, None, None)
     }
+
+    pub fn print_table(&self, prod_index: &Vec<Production>) -> String {
+        // TODO: Add numbered reduce states
+        match self.action_type {
+            ActionType::Shift => format!("s{:<5}", self.shift_state.unwrap()),
+            ActionType::Reduce => format!(
+                "r{:<4.4} ",
+                match prod_index
+                    .iter()
+                    .position(|x| x.eq_ignore_dot(self.reduce_prod.as_ref().unwrap()))
+                {
+                    Some(x) => x,
+                    None => panic!("Production not found in index: {}", self),
+                }
+            ),
+            ActionType::Accept => format!("Accept"),
+        }
+    }
 }
 
 impl Display for Action {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self.action_type {
-            ActionType::Shift => write!(f, "s{:<5}", self.shift_state.unwrap()),
-            ActionType::Reduce => write!(f, "r{:4.4} ", self.reduce_prod.as_ref().unwrap().lhs),
+            ActionType::Shift => write!(f, "s{}", self.shift_state.unwrap()),
+            ActionType::Reduce => write!(f, "r[{}]", self.reduce_prod.as_ref().unwrap()),
             ActionType::Accept => write!(f, "Accept"),
         }
     }

@@ -1,0 +1,18 @@
+===== t
+EQ
+MULT
+ID
+
+===== nt
+s
+l
+r
+
+===== g
+s =>    l EQ r |
+        r ;
+
+l =>    MULT r |
+        ID ;
+
+r =>    l ;
