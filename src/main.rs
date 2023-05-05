@@ -24,4 +24,24 @@ fn main() {
     for token in tokens {
         println!("{}", token);
     }
+
+    // Print out static TERM_INDEX
+    println!("TERM_INDEX:");
+    for (i, term) in DragonParser::TERM_INDEX.iter().enumerate() {
+        println!("\t{} {}", i, term);
+    }
+
+    // Print out static NONTERM_INDEX
+    println!("NONTERM_INDEX:");
+    for (i, term) in DragonParser::NONTERM_INDEX.iter().enumerate() {
+        println!("\t{} {}", i + DragonParser::NONTERM_OFFSET, term);
+    }
+
+    // Print out static PROD_INDEX
+    for term in DragonParser::PROD_INDEX.iter() {
+        println!("    {:?}", term);
+    }
+
+    let p = Production::decode_row(&DragonParser::PROD_INDEX[3]);
+    println!("{}", p);
 }

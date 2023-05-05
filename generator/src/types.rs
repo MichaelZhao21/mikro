@@ -3,6 +3,8 @@ use std::{
     fmt::{self, Display, Formatter},
 };
 
+use quote::{quote, ToTokens};
+
 pub struct TokenStream {
     pub tokens: Vec<GeneratorToken>,
     pub index: usize,
@@ -223,6 +225,20 @@ impl Display for Production {
     }
 }
 
+impl ToTokens for Production {
+    fn to_tokens(&self, tokens: &mut proc_macro2::TokenStream) {
+        let lhs = self.lhs.clone();
+        let rhs = self.rhs.iter().map(|sym| sym.to_token_stream());
+        let rhs = quote! { vec![#(#rhs),*] };
+        tokens.extend(quote! {
+            Production {
+                lhs: #lhs,
+                rhs: #rhs,
+            }
+        });
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct GeneratorToken {
     pub token_type: GeneratorTokenType,
@@ -411,6 +427,16 @@ impl Symbol {
             name: "$".to_string(),
             is_terminal: true,
         }
+    }
+}
+
+impl ToTokens for Symbol {
+    fn to_tokens(&self, tokens: &mut proc_macro2::TokenStream) {
+        let name = self.name.clone();
+        let is_terminal = self.is_terminal;
+        tokens.extend(quote! {
+            Symbol { name: #name, is_terminal: #is_terminal }
+        })
     }
 }
 
