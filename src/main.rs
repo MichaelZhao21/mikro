@@ -1,11 +1,8 @@
 use generator::Parser;
 use mikro::lexer;
 
-#[derive(Parser)]
-#[grammar = "examples/grammars/dragon.mik"]
-struct DragonParser;
-
 fn main() {
+    // Read in command line arguments
     let args = std::env::args().collect::<Vec<_>>();
 
     // Make sure there is one argument (input file)
